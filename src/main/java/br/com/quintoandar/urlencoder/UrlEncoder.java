@@ -1,7 +1,10 @@
 package br.com.quintoandar.urlencoder;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
+import lombok.Builder;
+import lombok.Data;
 import lombok.NonNull;
 import org.apache.commons.lang3.RandomStringUtils;
 
@@ -65,6 +68,36 @@ public class UrlEncoder {
     return null;
   }
 
+  private ShortUrlResponse shortUrlWithKeyword(String urlToEncode, String keywordWithPrefix) {
+    Map<String, Object> result = this.service.getInstance()
+        .shorturl(signature, "shorturl", "json", urlToEncode, keywordWithPrefix,
+            "URL Shortned via QuinToUrlEncoder.java");
+    boolean fail = result.get("status").equals("fail");
+    String shorturl = Optional.ofNullable(result.get("shorturl"))
+        .map(o -> o.toString()).orElse(null);
+    FailReason failReason = Optional.ofNullable(result.get("message"))
+        .map(m -> {
+          if (fail) {
+            if (m.toString().equalsIgnoreCase(
+                String.format(
+                    "Short URL %s already exists in database or is reserved",
+                    keywordWithPrefix))
+                ) {
+              return FailReason.KEYWORD_ALREADY_EXIST;
+            } else {
+              return FailReason.UNKNOWN;
+            }
+          }
+          return null;
+        }).orElse(null);
+
+    return ShortUrlResponse.builder()
+        .shortUrl(shorturl)
+        .fail(fail)
+        .failReason(failReason)
+        .build();
+  }
+
   public String encodeURLWithHash(String urlToEncode, String hashLoginBypass, String prefix) {
     int tamHashEncurtado = 6;
     StringBuilder keyword = new StringBuilder(prefix);
@@ -92,5 +125,19 @@ public class UrlEncoder {
 
   private String generateRandomAlphanumeric() {
     return RandomStringUtils.randomAlphanumeric(keywordLength).toLowerCase();
+  }
+
+  public enum FailReason {
+    KEYWORD_ALREADY_EXIST,
+    UNKNOWN,
+  }
+
+  @Data
+  @Builder
+  public class ShortUrlResponse {
+
+    private String shortUrl;
+    private boolean fail;
+    private FailReason failReason;
   }
 }
