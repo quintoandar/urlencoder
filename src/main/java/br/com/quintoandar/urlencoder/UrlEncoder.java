@@ -8,7 +8,7 @@ import lombok.NonNull;
 import org.apache.commons.lang3.RandomStringUtils;
 
 @Data
-public abstract class UrlEncoder {
+public class UrlEncoder {
 
   private static final int SIZE_SHORT_HASH = 6;
 
