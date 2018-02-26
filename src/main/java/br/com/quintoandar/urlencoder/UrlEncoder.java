@@ -30,7 +30,7 @@ public class UrlEncoder {
       @NonNull String environment) {
     this(uri, keywordLength, signature);
     this.withEnvironment = true;
-    this.environment = String.format("%s-", environment);
+    this.environment = environment;
   }
 
   public String encodeURL(String url) {
