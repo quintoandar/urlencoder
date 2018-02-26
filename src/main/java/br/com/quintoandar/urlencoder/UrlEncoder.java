@@ -1,11 +1,16 @@
 package br.com.quintoandar.urlencoder;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
+import lombok.Data;
 import lombok.NonNull;
 import org.apache.commons.lang3.RandomStringUtils;
 
+@Data
 public class UrlEncoder {
+
+  private static final int SIZE_SHORT_HASH = 6;
 
   private YourlsApiService service;
   private int keywordLength;
@@ -25,72 +30,115 @@ public class UrlEncoder {
       @NonNull String environment) {
     this(uri, keywordLength, signature);
     this.withEnvironment = true;
-    this.environment = String.format("%s-", environment);
+    this.environment = environment;
   }
 
-  public String encodeURL(@NonNull String urlToEncode) {
-    return encodeURL(urlToEncode, null, false);
-  }
-
-  public String encodeURLWithSufix(String urlToEncode, @NonNull String keyword) {
-    return encodeURL(urlToEncode, keyword, true);
-  }
-
-  private String encodeURL(String urlToEncode, String keyword, boolean overwrite) {
-    keyword = keyword == null ? generateRandomAlphanumeric() : keyword;
-    String keywordWithPrefix = this.environment + keyword;
-
-    keywordWithPrefix = keywordWithPrefix.toLowerCase();
-    Map<String, Object> map = this.service.getInstance()
-        .shorturl(signature, "shorturl", "json", urlToEncode, keywordWithPrefix,
-            "URL Shortned via QuinToUrlEncoder.java");
-
-    if (map.get("status").equals("fail")) {
-      if (map.get("message").toString().equalsIgnoreCase(
-          "Short URL " + keywordWithPrefix + " already exists in database or is reserved")) {
-        if (overwrite && keyword != null) {
-          this.service.getInstance()
-              .delete(signature, YourlsApi.ACTION_DELETE, YourlsApi.FORMAT_JSON, keywordWithPrefix);
-          return encodeURL(urlToEncode, keyword, overwrite);
-        }
-        if (!overwrite && keyword == null) {
-          return encodeURL(urlToEncode, null, overwrite);
-        }
-      }
-    }
-
-    if (map != null && map.containsKey("shorturl")) {
-      return map.get("shorturl").toString();
+  public String encodeURL(String url) {
+    String generatedKeyword = generateRandomAlphanumeric();
+    String finalKeyword = isWithEnvironment() ?
+        generateKeywordWithEnvironment(generatedKeyword)
+        : generatedKeyword;
+    ShortUrlResponse shortUrlResponse = shortUrlWithKeyword(url, finalKeyword);
+    if (shortUrlResponse.isFail() && shortUrlResponse.getFailReason().equals(FailReason.KEYWORD_ALREADY_EXIST)) {
+      return this.encodeURL(url);
+    } else if (!shortUrlResponse.isFail()) {
+      return shortUrlResponse.getShortUrl();
     }
     return null;
   }
 
-  public String encodeURLWithHash(String urlToEncode, String hashLoginBypass, String prefix) {
-    int tamHashEncurtado = 6;
-    StringBuilder keyword = new StringBuilder(prefix);
-
-    if (hashLoginBypass != null && hashLoginBypass.length() >= tamHashEncurtado) {
-      int ini = (new Random()).nextInt(hashLoginBypass.length() - tamHashEncurtado);
-      keyword.append("-" + hashLoginBypass.substring(ini, ini + tamHashEncurtado));
+  public String encodeUrlWithKeyword(String url, String keyword) {
+    String finalKeyword = isWithEnvironment() ?
+        generateKeywordWithEnvironment(keyword)
+        : keyword;
+    ShortUrlResponse shortUrlResponse = shortUrlWithKeyword(url, finalKeyword);
+    if (shortUrlResponse.isFail() && shortUrlResponse.getFailReason().equals(FailReason.KEYWORD_ALREADY_EXIST)) {
+      deleteKeyword(finalKeyword);
+      return this.encodeUrlWithKeyword(url, keyword);
+    } else if (!shortUrlResponse.isFail()) {
+      return shortUrlResponse.getShortUrl();
     }
-    return encodeURL(urlToEncode, keyword.toString(), true);
+    return null;
   }
 
-  public String encodeWithMultipleTries(String urlToEncode, String hashLoginBypass, String prefix,
-      int maxTries) {
-    int tries = 0;
-    while (tries < maxTries) {
+  public String encodeURLWithHash(String url, @NonNull String hash, String prefix) {
+    String finalKeyword = hash.length() >= SIZE_SHORT_HASH ? generateShortHash(hash, prefix) : prefix;
+    return encodeUrlWithKeyword(url, finalKeyword);
+  }
+
+  public String encodeWithHashMultipleTries(String url, String hash, String prefix, int maxTries) {
+    int nTries = maxTries;
+    while (nTries > 0) {
       try {
-        return encodeURLWithHash(urlToEncode, hashLoginBypass, prefix);
+        return encodeURLWithHash(url, hash, prefix);
       } catch (Exception e) {
-        tries++;
+        nTries--;
       }
     }
     throw new RuntimeException(
-        String.format("Url shortning unavailable: tried %d", maxTries));
+        String.format("Url shortning unavailable: tried %d times.", maxTries));
   }
 
+  private String generateShortHash(String hash, String prefix) {
+    int ini = (new Random()).nextInt(hash.length() - SIZE_SHORT_HASH);
+    return String.format("%s-%s", prefix, hash.substring(ini, ini + SIZE_SHORT_HASH));
+  }
+
+  private String generateKeywordWithEnvironment(String generatedKeyword) {
+    return String.format("%s-%s", getEnvironment(), generatedKeyword);
+  }
+
+  private void deleteKeyword(String keyword) {
+    this.service.getInstance()
+        .delete(signature, YourlsApi.ACTION_DELETE, YourlsApi.FORMAT_JSON, keyword);
+  }
+
+  private ShortUrlResponse shortUrlWithKeyword(String urlToEncode, String keyword) {
+    Map<String, Object> result = this.service.getInstance()
+        .shorturl(signature, "shorturl", "json", urlToEncode, keyword.toLowerCase(),
+            "URL Shortned via UrlEncoder.java");
+    boolean fail = result.get("status").equals("fail");
+    String shorturl = Optional.ofNullable(result.get("shorturl"))
+        .map(o -> o.toString()).orElse(null);
+    FailReason failReason = Optional.ofNullable(result.get("message"))
+        .map(m -> {
+          if (fail) {
+            if (m.toString().equalsIgnoreCase(
+                String.format(
+                    "Short URL %s already exists in database or is reserved",
+                    keyword))
+                ) {
+              return FailReason.KEYWORD_ALREADY_EXIST;
+            } else {
+              return FailReason.UNKNOWN;
+            }
+          }
+          return null;
+        }).orElse(null);
+    
+    return new ShortUrlResponse(shorturl,fail,failReason);
+  }
+  
   private String generateRandomAlphanumeric() {
     return RandomStringUtils.randomAlphanumeric(keywordLength).toLowerCase();
+  }
+  
+  protected enum FailReason {
+    KEYWORD_ALREADY_EXIST,
+    UNKNOWN,
+  }
+
+  @Data
+  protected class ShortUrlResponse {
+    
+    private String shortUrl;
+    private boolean fail;
+    private FailReason failReason;
+    
+    public ShortUrlResponse(String shortUrl, boolean fail, FailReason failReason) {
+      this.shortUrl = shortUrl;
+      this.fail = fail;
+      this.failReason = failReason;
+    }
   }
 }
