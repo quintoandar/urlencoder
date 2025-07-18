@@ -25,7 +25,8 @@ public interface YourlsApi {
   Map<String, Object> shorturl(@QueryParam("signature") String signature,
       @QueryParam("action") @DefaultValue(ACTION_SHORTURL) String action,
       @QueryParam("format") @DefaultValue(FORMAT_JSON) String format, @QueryParam("url") String url,
-      @QueryParam("keyword") String keyword, @QueryParam("title") String title);
+      @QueryParam("keyword") String keyword, @QueryParam("title") String title),
+      @QueryParam("override") @DefaultValue("0") String override);
 
   @GET
   @Path("/yourls-api.php")

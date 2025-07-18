@@ -96,7 +96,7 @@ public class UrlEncoder {
   private ShortUrlResponse shortUrlWithKeyword(String urlToEncode, String keyword) {
     Map<String, Object> result = this.service.getInstance()
         .shorturl(signature, "shorturl", "json", urlToEncode, keyword.toLowerCase(),
-            "URL Shortned via UrlEncoder.java");
+            "URL Shortned via UrlEncoder.java", "1");
     boolean fail = result.get("status").equals("fail");
     String shorturl = Optional.ofNullable(result.get("shorturl"))
         .map(o -> o.toString()).orElse(null);
