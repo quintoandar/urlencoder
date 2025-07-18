@@ -33,14 +33,18 @@ public class UrlEncoder {
     this.environment = environment;
   }
 
-  public String encodeURL(String url) {
+  private String encodeURL(String url) {
+    return encodeURL(url, 5);
+  }
+
+  private String encodeURL(String url, int maxTries) {
     String generatedKeyword = generateRandomAlphanumeric();
     String finalKeyword = isWithEnvironment() ?
         generateKeywordWithEnvironment(generatedKeyword)
         : generatedKeyword;
     ShortUrlResponse shortUrlResponse = shortUrlWithKeyword(url, finalKeyword);
     if (shortUrlResponse.isFail() && shortUrlResponse.getFailReason().equals(FailReason.KEYWORD_ALREADY_EXIST)) {
-      return this.encodeURL(url);
+      return this.encodeURL(url, maxTries -1);
     } else if (!shortUrlResponse.isFail()) {
       return shortUrlResponse.getShortUrl();
     }
