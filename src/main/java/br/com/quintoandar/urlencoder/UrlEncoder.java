@@ -33,14 +33,18 @@ public class UrlEncoder {
     this.environment = environment;
   }
 
-  public String encodeURL(String url) {
+  private String encodeURL(String url) {
+    return encodeURL(url, 5);
+  }
+
+  private String encodeURL(String url, int maxTries) {
     String generatedKeyword = generateRandomAlphanumeric();
     String finalKeyword = isWithEnvironment() ?
         generateKeywordWithEnvironment(generatedKeyword)
         : generatedKeyword;
     ShortUrlResponse shortUrlResponse = shortUrlWithKeyword(url, finalKeyword);
     if (shortUrlResponse.isFail() && shortUrlResponse.getFailReason().equals(FailReason.KEYWORD_ALREADY_EXIST)) {
-      return this.encodeURL(url);
+      return this.encodeURL(url, maxTries -1);
     } else if (!shortUrlResponse.isFail()) {
       return shortUrlResponse.getShortUrl();
     }
@@ -96,7 +100,7 @@ public class UrlEncoder {
   private ShortUrlResponse shortUrlWithKeyword(String urlToEncode, String keyword) {
     Map<String, Object> result = this.service.getInstance()
         .shorturl(signature, "shorturl", "json", urlToEncode, keyword.toLowerCase(),
-            "URL Shortned via UrlEncoder.java");
+            "URL Shortned via UrlEncoder.java", "1");
     boolean fail = result.get("status").equals("fail");
     String shorturl = Optional.ofNullable(result.get("shorturl"))
         .map(o -> o.toString()).orElse(null);
